@@ -1,0 +1,3 @@
+isochar.lo: isochar.c cim.h
+
+cim.h:

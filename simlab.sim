@@ -1,0 +1,89 @@
+begin
+external class demos="/home/erik/cim/demos.atr";
+demos begin
+
+!declarations;
+INTEGER session_counter, b, b_step, b_min, b_max, simtime, id;
+ref(RDist) NEW_VIDEO_REQUEST, ACTIVE_SESSION_TIME, TIME_INTERVAL;
+ref(Bdist) dev_type;
+ref(RES) C_a;
+ref(count) Dev_counter_small, dev_counter_large;
+
+
+
+!entities;
+entity class customer;
+	begin
+	ref(Session) S_id;
+loop:
+	hold(NEW_VIDEO_REQUEST.sample);
+	IF dev_type.sample then dev_counter_small.update(1)
+	ELSE dev_counter_large.update(1);
+	!sets device type, true false small dev, false = large dev;
+	IF C_a.avail < 1 then
+		begin
+		goto loop;
+		end
+	ELSE
+		begin
+		
+		S_id :-new session("session", this customer);
+		S_id.schedule(0.0);
+		session_counter :- session_counter + 1;
+		repeat;
+	 	end;
+	end ** customer **;
+
+entity class session(S_id); ref(customer) S_id;
+	begin
+	ref(session_timer) T_id;
+	T_id :- new session_timer("Session Timer", this session);
+	T_id.schedule(0.0);
+
+	hold(TIME_INTERVAL.sample);
+	if C_a.avail < 6 then	b:=C_a.avail
+	else b:=6;
+	C_a.acquire(b);
+loop:
+	hold(TIME_INTERVAL.sample);
+	if interrupted = 0 then
+		begin
+		if C_a.avail > b_min then
+		C_a.acquire(1)
+		else
+			begin
+		C_a.release(1);
+		repeat;
+			end;
+		end
+	else
+		begin
+		C_a.release(b);
+		session_counter := session_counter - 1;
+		end;
+	end;
+
+entity class session_timer(T_id); ref(session) S_id;
+	begin
+
+	hold(ACTIVE_SESSION_TIME.sample);
+	session(S_id).interrupt(1);
+	
+	end;
+
+!main constructor;
+ACTIVE_SESSION_TIME :- New NegExp("Session_time",(1.0/90));
+NEW_VIDEO_REQUEST :- New NegExp("new_vid_req",(1.0/30));
+TIME_INTERVAL :- New NegExp("T_i", 1);
+dev_type :- new draw("dev_type", 0.7);
+session_counter := 1;
+C_a :- New RES("Cap_avail", 100);
+b_min := 1;
+b_max := 6;
+b_step := 1;
+dev_counter_small :- new Count("small screen");
+dev_counter_large :- new Count("large scren");
+session_counter := 0;
+
+end;
+end;

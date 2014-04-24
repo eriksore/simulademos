@@ -1,0 +1,844 @@
+BEGIN
+  EXTERNAL CLASS demos= "/home/erik/cim/demos.atr";
+  comment  EXTERNAL CLASS demos="/home/libak/lib/Demos/demos";
+  comment EXTERNAL CLASS demos="\DemosStudy\demos";
+
+  COMMENT Simulates the Internet model without/with  priority.
+  Three types of traffic sources are implemented (voice, data and video).
+  The traffic to node 1 from one specified group (FocusedGroup)
+  is studied at the receiver terminal attached to node n (last node).
+  Traffic from other terminal groups are cross traffic;
+
+  demos
+  BEGIN
+    REF(rdist) Flatford, starttid;
+
+    REF(waitq) ARRAY RouterInQ(1:10);
+    REF(waitq) ARRAY TermSendQ(1:10);
+    REF(waitq) TermInQ,ToTermQ;
+    COMMENT
+    RouterInQ - the incoming packet queue for router,one per router
+    TermSendQ - the outgoing queue for terminal group
+    TermInQ -   the incoming queue for the terminal receiver;
+
+    REF(InFile) datafile;
+    REF(OutFile) MyTrace;
+  
+    
+    
+    INTEGER ARRAY R(1:10,1:10);
+    REAL ARRAY C(1:10,1:10),CapGrpToRouter(1:10),AccessNode(1:10), BucketDepth(1:10,1:10);
+    COMMENT
+    R - the routing matrix
+    C - gives the link capacity between routers
+    CapGrpToRouter - the link capacity from the terminal group to the first router
+    AccessNode-the node(router) the group accesses
+    BucketDepth - the current Token Bucket depth;
+
+    INTEGER i,j,n,m,gno,FocusedGroup,dest,HighPri;
+    INTEGER ARRAY NoOfType(1:10,1:10);
+    INTEGER CapRouterToRcvr;
+    INTEGER PoliceType,overHead;
+    INTEGER PriorityType; comment =0 no priority =1 using packet type to decide priority = 2 using packet group no to decide priority
+  
+     
+    COMMENT
+      type - packet type there are three type sources
+      speech- type1
+      data- type2
+      video- type3
+    n - the number of routers
+    m - the number of terminal groups
+    HighPri - the high priority traffic
+    FocusedGroup-the specified terminal group we will study;
+
+    REAL SimTime, BucketSiz,ToKRate;
+    TEXT string;
+
+
+        
+      
+      COMMENT ************************ SPEECH CLASS ****************************;
+      COMMENT ********* This class was fixed by modifying the packetize procedure******************;
+
+    entity CLASS speech(groupnr,sourcenr,TermSendQ,AccessNode,DestNode);
+    INTEGER groupnr,sourcenr,AccessNode,DestNode;
+    REF(waitq) TermSendQ;
+    BEGIN
+      REF(rdist) ActiveTimeDistr,SilentTimeDistr;
+      
+      REAL EndTimeInState,packetSize,sumsize;
+      INTEGER type, packetCount;
+       BOOLEAN active;
+      REAL ARRAY fragments(1:4);
+      REF(count)  GenSpe;
+       
+      COMMENT This is the procedure of generating a speech packet;
+      PROCEDURE packetize(size);
+      INTEGER size;
+         BEGIN
+	     packetCount:=packetCount+1;
+	     fragments(packetCount):=size;
+	     sumsize := sumsize+size;
+	     IF packetCount=4 THEN
+	         BEGIN
+	             COMMENT  if policetype is 1 the token bucket is used to confine the injected speech traffic;
+	             IF PoliceType = 1 THEN
+	                BEGIN
+                            IF (sumsize+overhead)<= BucketDepth(groupnr,type) THEN 
+                               BEGIN
+                                  NEW packet(edit("pack",1),TermSendQ,type,groupnr,sourcenr,AccessNode,DestNode,sumsize+overhead,fragments,time).schedule(0.0);
+                                  BucketDepth(groupnr,type):= BucketDepth(groupnr,type) - (sumsize+overhead);
+                               END if; 
+                        END
+                     ELSE       
+                       BEGIN
+ 		          NEW packet(edit("pack",1),TermSendQ,type,groupnr,sourcenr,AccessNode,DestNode,sumsize+overhead,fragments,time).schedule(0.0);
+ 		       END;
+	!	    GenSpe.update(1);
+		    packetcount:=0;
+	            sumsize:=0;
+	    END if;      
+	 END packetize;
+
+      
+      packetCount:=sumsize:=0;
+      type:=1;
+      active:=TRUE;
+    
+      
+      GenSpe :- NEW count("GeneratedSpeech");
+      
+      ActiveTimeDistr:-NEW NegExp("ActiveTimeDistr",1.0/0.96);
+      SilentTimeDistr:-NEW NegExp("SilentTimeDistr",1.0/1.69);
+ 
+            
+      EndTimeInState:=ActiveTimeDistr.sample+time;
+      packetSize:=20*8;
+      Hold(starttid.sample);
+     
+     WHILE TRUE DO
+      BEGIN
+
+        Hold(0.03);
+        IF active THEN
+        BEGIN
+           IF EndTimeInState>Time THEN 
+	     BEGIN
+	     packetSize:=20*8;
+	     END
+	   ELSE 
+	       BEGIN 
+	             active := NOT active;
+		     EndTimeInState:=SilentTimeDistr.sample+time;	
+		    packetSize:=4*8;
+		   END; 	
+	   END ELSE
+	   BEGIN
+	      IF EndTimeInState>Time THEN
+	      BEGIN
+	         packetSize:=4*8;
+	       END
+	      ELSE
+	         BEGIN
+	            active:= NOT active;
+	            EndTimeInState:=ActiveTimeDistr.sample+time;
+	            packetSize:=20*8;
+	       END;
+	   END;
+	   
+	   packetize(packetSize);
+	   
+	
+	
+      END while true;
+    END class speech;
+
+
+    COMMENT ****************** DATA CLASS ******************************************;
+    
+    entity CLASS Data(groupnr,sourcenr,TermSendQ,AccessNode,DestNode);
+    INTEGER groupnr,sourcenr,AccessNode,DestNode;
+    REF(waitq) TermSendQ;
+    BEGIN
+       REF(negexp) TimeDistr;	
+       REF(rdist)  DataSizeDistr;
+       INTEGER fileSize,maxSize,type;
+       REAL meanSize,variance,k,alpha,m;	
+       REAL ARRAY fragments(1:4); COMMENT not in use for data packets;
+
+       COMMENT source for data tailed distribution k,alpha and m are the parameters of Pareto distribution
+       m - an upper limit of the generated variates;
+       
+       maxSize := 1440*8; comment max ip payload;
+       type := 2;
+     
+    
+       TimeDistr:- NEW NegExp("DataArrivals",1.0); 
+       
+       DataSizeDistr:-NEW pareto("pareto",50674,2.118,0);
+       COMMENT DataSizeDistr:-NEW NegExp("Filesize",1/96000);
+
+       Hold(starttid.sample);
+       WHILE TRUE DO
+	  BEGIN
+	     fileSize:= DataSizeDistr.sample;
+	    	     
+	     WHILE fileSize>0 DO
+		BEGIN
+		   INTEGER sendSize;
+		   IF fileSize > maxSize THEN 
+		       BEGIN 
+			 sendSize := maxSize;
+			  fileSize := fileSize - maxSize;
+		      END 
+		   ELSE 
+		       BEGIN 
+			 sendSize := fileSize;	
+			 fileSize :=0;
+		      END;
+		  IF PoliceType = 1THEN
+		      BEGIN
+		           IF (sendSize+overhead)<=BucketDepth(groupnr, 2) THEN
+		           BEGIN
+		                NEW packet(edit("pack",1),TermSendQ,type,groupnr,sourcenr,AccessNode
+			  ,DestNode, sendSize+overHead ,fragments,time).schedule(0.0);
+			        BucketDepth(groupnr, 2):=  BucketDepth(groupnr, 2) - (sendSize+overhead); 
+		           END if size;
+		       END 
+		   ELSE
+		        NEW packet(edit("pack",1),TermSendQ,type,groupnr,sourcenr,AccessNode,DestNode, sendSize+overHead ,fragments,time).schedule(0.0);
+			
+		hold(0.0);
+		END;	
+	
+	     Hold(TimeDistr.sample);
+	
+
+	  END while true;
+    END class data;
+
+
+
+COMMENT *********************** VIDEO CLASS **************************************;
+
+    entity CLASS video(groupnr,sourcenr,TermSendQ,AccessNode,DestNode);
+    INTEGER groupnr,sourcenr,AccessNode,DestNode;
+    REF(waitq) TermSendQ;
+    BEGIN
+      REF(beta) betaN;
+      REF(gamma) gammaNull,gammaN;
+      INTEGER type;
+      REAL trekk, dataSize,maxSize,overhead;
+      REAL ARRAY fragments(1:4);
+      maxSize := 1440*8; 
+      type:=3;
+      gammaNull:-NEW gamma("gammaNull",3.06204,16329);
+      gammaN:-NEW gamma("gammaN",0.06204,16329);
+      betaN:-NEW beta("betaN",3,0.06204); 
+      trekk:=gammaNull.sample;
+      Hold(starttid.sample);
+      WHILE TRUE DO
+      BEGIN
+	 dataSize := trekk;
+	 WHILE dataSize>0 DO
+	    BEGIN
+	       INTEGER sendSize;
+	       IF dataSize > maxSize THEN 
+	           BEGIN 
+		     sendSize := maxSize;
+		     dataSize := dataSize - maxSize;
+		  END 
+	       ELSE 
+	           BEGIN 
+		     sendSize := dataSize;	
+		     dataSize :=0;
+		  END;
+		  
+	      IF PoliceType= 1 THEN
+		  BEGIN
+		      IF (sendSize+overhead)<=BucketDepth(groupnr, 3) THEN
+		         BEGIN
+		              NEW packet(edit("pack",1),TermSendQ,type,groupnr,sourcenr,AccessNode
+			  ,DestNode, sendSize+overHead ,fragments,time).schedule(0.0);
+			     BucketDepth(groupnr,3):= BucketDepth(groupnr,3) - (sendSize+overhead);
+		         END;
+		  END
+		  ELSE
+	           NEW packet(edit("pack",1),TermSendQ,type,groupnr,sourcenr,AccessNode ,DestNode, sendSize+overHead ,fragments,time).schedule(0.0);
+	         
+	       
+	    END;	
+	 Hold(0.04);
+	 trekk:=betaN.sample*trekk + gammaN.sample;
+
+      END while true;
+    END class video;
+
+
+COMMENT ************************ BETA CLASS **********************************;
+COMMENT this class is defined for Gamma distribution;
+  
+  rdist CLASS beta(a,b);
+    REAL a,b;
+    COMMENT The relation between parameter a,b and mean,variance is
+            mean=a/(a+b)
+            variance=ab/(a+b+1)(a+b)**2;
+    BEGIN
+      REAL y,z,r1,r2;
+      real PROCEDURE sample;
+      BEGIN
+	         Obs := Obs+1;	
+    L:     	 r1:=Flatford.sample;
+	         r2:=Flatford.sample;
+	         y:=r1**(1/a);
+	         z:=r2**(1/b);
+	         IF (y+z)>1 THEN GOTO L;
+	         sample:=y/(y+z);
+      END;
+   END;
+
+
+COMMENT ******************* GAMMA CLASS**************************;
+COMMENT this class is defined for video traffic generation;
+
+    rdist CLASS gamma(a,b);
+    LONG REAL a,b;
+    COMMENT The relation between parameter a,b and mean,variance is  mean=a*b and    variance=a*b**2;
+    BEGIN
+      REF(beta) betaVariates;
+      REF(rdist) variatesGen;
+      REAL r,u,v,y,z;
+      INTEGER i,k;
+
+      LONG real procedure sample;
+      BEGIN
+	 Obs := Obs+1;
+        v:=0.0;
+        FOR i:=1 STEP 1 UNTIL k DO
+          BEGIN
+            u:=variatesGen.sample;
+            v:=v+u;
+          END;
+            y:=betaVariates.sample;
+            z:=variatesGen.sample;
+            sample:=b*(v+y*z);
+      END;
+      k:=Entier(a);
+      r:=a-k;
+      betaVariates:-NEW beta("betaVariates",r,(1-r));
+      variatesGen:-NEW NegExp("variatesGen",1.0);
+    END calss gamma;
+
+
+
+COMMENT *************************** SENDER CLASS*******************************;
+COMMENT This class is the common sender without considering the priority queues;
+
+    entity CLASS sender(senderQ,c,nextQ);
+    REF(waitq) senderQ,nextQ;
+    REAL c;
+    BEGIN
+      REF(packet) pck;
+  
+      WHILE TRUE DO
+	 BEGIN
+	    pck:-senderQ.coopt;
+	    Hold(pck.size/c);
+	    pck.Qref:-nextQ;
+	    pck.schedule(0.0);
+	
+	 END while;
+   END class sender;
+
+
+COMMENT ****************************** PACKET CLASS *********************************************;
+COMMENT This class is defined to generate a packet;
+
+    entity CLASS packet(Qref,type,groupnr,sourcenr,AccessNode,DestNode,size,speechFragments,timestamp);
+    VALUE speechFragments;	
+    REF(waitq) Qref;
+    INTEGER type,groupnr,sourcenr,AccessNode,DestNode;
+    REAL size;
+    REAL ARRAY speechFragments;
+    REAL timestamp;
+    BEGIN
+     
+        BOOLEAN live;
+        REF(packet) next;
+           live := TRUE;
+          timestamp:=Time;   
+          WHILE live DO
+             BEGIN
+                Qref.wait;
+             END;
+       END class packet;
+
+   
+   COMMENT *********************** PRIORITYSENDER CLASS*********************************;
+   
+    entity CLASS PrioritySender(InQ,LowInQ,capacity, OutQ);
+
+    REAL capacity;
+    REF(waitq) InQ, LowInQ, OutQ;
+ 
+    BEGIN
+    
+        REF(packet) pkt;
+           
+       WHILE TRUE DO
+             BEGIN
+               
+                      
+                       pkt :- InQ.coopt;
+                       hold(pkt.size/capacity);
+                       pkt.Qref :- OutQ;
+                       pkt.schedule(0.0);
+               
+                
+                 WHILE (InQ.length=0 and LowInQ.length>0) DO
+                 BEGIN
+                    pkt :- LowInQ.coopt;
+                    hold(pkt.size/capacity);
+                    pkt.Qref :-OutQ;
+                    pkt.schedule(0.0);
+                 END;
+            
+      END whiletrue;
+  END class prioritysender;
+    
+   
+    COMMENT ************************** ROUTER CLASS*********************************;
+          
+    entity CLASS router(RouterNo);
+    INTEGER RouterNo;
+    BEGIN
+       REF(waitq) ARRAY RouterOutQ(1:10);
+       REF(waitq) LowPriQ;
+       REF(count) ARRAY RouterForSpeechCount(1:10);
+       REAL PktDelay;
+       INTEGER PktCount;
+       
+              
+       PROCEDURE PriorityQue(pkt, OutQ,LowQ);
+           REF(packet) pkt;
+           REF(waitQ) OutQ,LowQ;
+           BEGIN
+                
+                
+                IF PriorityType = 1 THEN
+                BEGIN
+               
+                       IF pkt.type=HighPri THEN
+                       BEGIN
+                          pkt.Qref :- OutQ;
+                          pkt.schedule(0.0);
+                       END
+                       ELSE 
+                       BEGIN
+                           pkt.Qref :- LowQ;
+                           pkt.schedule(0.0);
+                       END;
+                END;
+                
+                 IF PriorityType=2 THEN
+                   BEGIN
+             
+                        IF pkt.groupnr=FocusedGroup THEN
+                        BEGIN
+                           pkt.Qref :- OutQ;
+                          pkt.schedule(0.0);
+                        END
+                        ELSE
+                        BEGIN
+                             pkt.Qref :- LowQ;
+                             pkt.schedule(0.0);
+                        END;
+                     
+                   END;
+          END PriorityQueue;
+       
+            
+       
+       PktCount := 0;
+       RouterForSpeechCount(RouterNo):-NEW count(edit("Router Forwarded speech packets", RouterNo));
+       
+       
+       FOR i:=1 STEP 1 UNTIL n DO
+	  BEGIN
+	     IF C(RouterNo,i)>0.0 THEN
+		BEGIN
+		   RouterOutQ(i):-NEW waitq(edit(edit("RouterOutQ",RouterNo),i));
+		   IF PriorityType = 0 THEN
+		         BEGIN
+		              NEW sender(edit("sender",i),RouterOutQ(i),C(RouterNo,i),RouterInQ(i)).schedule(0.0);
+		          END
+		    ELSE
+		     BEGIN
+		         LowPriQ:- NEW waitq("LowPriQueue");
+		          NEW PrioritySender(edit("PriSender",i),RouterOutQ(i),LowPriQ,C(RouterNo,i),RouterInQ(i)).schedule(0.0);
+		         
+		          
+		      END;
+		END if;
+	  END for;
+       
+       WHILE TRUE DO
+	  BEGIN
+	     REF(packet) pck;
+	     pck:-RouterInQ(RouterNo).coopt;
+	
+	     IF pck.DestNode = RouterNo THEN 
+		BEGIN
+		   IF routerno = 1 THEN 
+		       BEGIN 
+		           pck.live := FALSE;
+		       END;
+		    IF pck.groupnr = FocusedGroup THEN
+		      BEGIN
+		        pck.Qref:-ToTermQ;
+		        pck.schedule(0.0);
+		      END
+		   ELSE 
+		       pck.live := FALSE;
+		
+	        END 
+	        ELSE 
+	        BEGIN
+	       
+	                  IF PriorityType = 0 THEN
+                                  BEGIN
+		                       pck.Qref:-RouterOutQ(R(RouterNo,pck.DestNode));  	
+		                       pck.schedule(0.0);
+		                   END
+		            ELSE 
+			    	BEGIN
+			    		 PriorityQue(pck, RouterOutQ(R(RouterNo,pck.DestNode)),LowPriQ);
+		                 END;
+		            
+	         END;
+	     	     
+	     
+	  END while true;
+    END class router;
+    
+
+COMMENT ******************* TERMRECEIVER CLASS**************************************;
+
+    entity CLASS TermReceiver;
+    BEGIN
+      REF(packet) pck;
+      REF(count) delayedFramesVideo, delayedFramesSpeech,DelayedFramesData,speechCount,videoCount,dataCount;
+      REF(tally) timeDelayVideo, timeDelaySpeech,timeDelayData;
+      REF(count) RecFocusPktCount;
+      REAL AveDelay,totalDelay;     
+      INTEGER Datapkt;
+     
+      RecFocusPktCount :- NEW count("RecFocuPktNo");
+      delayedFramesVideo:-NEW count("lostFramesVideo");
+      timeDelayVideo:-NEW tally("timeDelayVideo");
+      delayedFramesSpeech:-NEW count("lostFramesSpeech");
+      timeDelaySpeech:-NEW tally("timeDelaySpeech");
+      delayedFramesData:-NEW count("lostFramesData");
+      timeDelayData :- NEW tally("timeDelayData");
+      videoCount:-NEW count("videoCount");
+      speechCount:-NEW count("speechCount");
+      dataCount:-NEW count("dataCount");
+     
+     AveDelay := 0;
+     Datapkt := 0;
+     
+     WHILE TRUE DO
+       BEGIN
+      
+          pck:-TermInQ.coopt;
+  
+	 IF pck.groupnr = FocusedGroup THEN
+	   BEGIN
+	      RecFocusPktCount.update(1);
+	      IF pck.type = 1 THEN 
+	         BEGIN
+		    IF Time - pck.timestamp > 0.050 THEN 
+		    BEGIN
+		      delayedFramesSpeech.update(1);
+		     END
+		    ELSE 
+		        speechCount.update(1);	
+		    timeDelaySpeech.update(Time - pck.timestamp);
+		 END 
+	      ELSE IF pck.type = 3 THEN
+	      BEGIN
+		    IF Time - pck.timestamp > 0.300 THEN 
+		          delayedFramesVideo.update(1)
+		    ELSE
+		           videoCount.update(1);
+		 timeDelayVideo.update(Time - pck.timestamp);
+               END
+	      ELSE 
+	           IF pck.type = 2 THEN 
+	           BEGIN
+	           dataCount.update(1);
+	           Datapkt := Datapkt +1;
+	           timeDelayData.update(time-pck.timestamp);
+	           totalDelay := totalDelay + (time-pck.timestamp);
+	           AveDelay := totalDelay/Datapkt;
+	          ! MyTrace.OutText("The data pkt average delay is:");
+	          ! MyTrace.OutFix(AveDelay, 6, 16);
+	          ! MyTrace.OutImage;
+	           END;
+	   END;
+	pck.live := FALSE;
+      END while true;
+    END class TermReceiver;
+
+
+COMMENT ******************* TOKENBUCKET CLASS ************************************;
+
+       entity CLASS TokenBucket(BucketSize,TokenRate,type,grpno);
+       REAL BucketSize, TokenRate;
+       INTEGER type,grpno;
+       
+       BEGIN
+              
+              WHILE TRUE  DO
+              BEGIN
+               hold(1/TokenRate);
+                IF BucketDepth(grpno,type) < BucketSize THEN
+                      BucketDepth(grpno,type) := BucketDepth(grpno,type) +1;
+    
+             END while;
+       END class TokenBucket;
+
+
+
+COMMENT************************MAIN FUNCTION************************************;
+
+    Flatford:-NEW Uniform("uniform",0.0,1.0);
+    starttid:-NEW Uniform("uniform",0.0,0.04);
+    overHead := 40*8; comment tcp+ip heades;
+    
+   
+    datafile:-NEW InFile("data2009.txt");
+    
+    COMMENT you can create your own trace file here if you need;
+   ! MyTrace:- NEW OutFile("MyTrace.txt");
+   ! MyTrace.Open(Blanks(180));
+   ! MyTrace.OutImage;
+    
+
+    datafile.Open(Blanks(180));
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    datafile.InImage;
+    SimTime:=datafile.InReal;!Reads second line in datafile;
+    OutFix(SimTime,1,12);
+    OutImage;
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    datafile.InImage;
+    n:=datafile.InInt;!Reads fourth line in datafile;
+    OutInt(n,2);
+    OutImage;
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    OutImage;
+    FOR i:=1 STEP 1 UNTIL n DO
+    BEGIN
+      datafile.InImage;
+      FOR j:=1 STEP 1 UNTIL n DO
+      BEGIN
+        C(i,j):=datafile.Inreal;
+        Outfix(C(i,j),1,12);
+      END;
+      outimage;
+    END;
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    FOR i:=1 STEP 1 UNTIL n DO
+    BEGIN
+      datafile.InImage;
+      FOR j:=1 STEP 1 UNTIL n DO
+      BEGIN
+        R(i,j):=datafile.InInt;
+        OutInt(R(i,j),4);
+      END;
+      outimage;
+    END;
+
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    datafile.InImage;
+    m:=datafile.InInt;
+    OutInt(m,2);
+    OutImage;
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    datafile.InImage;
+    FocusedGroup:=datafile.InInt;
+    OutInt(FocusedGroup,2);
+    OutImage;
+    
+        datafile.InImage;
+        OutText(datafile.InText(80));
+        datafile.InImage;
+        HighPri:=datafile.InInt;
+        OutInt(HighPri,2);
+        OutImage;
+    
+    
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    OutImage;
+    datafile.InImage;
+    FOR i:=1 STEP 1 UNTIL m DO
+    BEGIN
+      AccessNode(i):=datafile.Inreal;
+      Outfix(AccessNode(i),1,12);
+    END;
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    datafile.InImage;
+    CapRouterToRcvr:=datafile.Inreal;
+    Outfix(CapRouterToRcvr,1,12);
+    OutImage;
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    OutImage;
+    datafile.InImage;
+    FOR i:=1 STEP 1 UNTIL m DO
+    BEGIN
+      CapGrpToRouter(i):=datafile.Inreal;
+      Outfix(CapGrpToRouter(i),1,12);
+    END;
+    OutImage;
+
+    Comment Create objects handling packets to terminals at node n;
+    NEW TermReceiver("TermReceiver").schedule(0.0);
+    TermInQ:-NEW waitq("TermInQ");
+    ToTermQ:-NEW waitq("ToTermQ");
+    NEW sender("SendsToTermInQ",ToTermQ,CapRouterToRcvr,TermInQ).schedule(0.0);
+
+    FOR i:=1 STEP 1 UNTIL n DO
+    BEGIN
+      RouterInQ(i):-NEW waitq(edit("RouterInQ",i));
+      NEW router(edit("router",i),i).schedule(0.0);
+    END;
+
+
+      datafile.InImage;
+     OutText(datafile.InText(80));
+     datafile.InImage;
+      PoliceType:=datafile.InInt;
+      OutInt(PoliceType,2);
+      OutImage;
+
+   
+  
+
+          datafile.InImage;
+          OutText(datafile.InText(80));
+          datafile.InImage;
+           PriorityType:=datafile.InInt;
+           OutInt(PriorityType,2);
+           OutImage;
+
+
+
+    datafile.InImage;
+    OutText(datafile.InText(80));
+    OutImage;
+
+    FOR i:=1 STEP 1 UNTIL m DO
+    BEGIN
+      Comment Read data for each terminal group;
+      datafile.InImage;
+      gno:=datafile.InInt;
+      OutInt(gno,4);
+
+      dest:=datafile.InInt;
+      OutInt(dest,4);
+
+      NoOfType(i,1):=datafile.InInt;
+      OutInt(NoOfType(i,1),4);
+
+      NoOfType(i,2):=datafile.InInt;
+      OutInt(NoOfType(i,2),4);
+
+      NoOfType(i,3):=datafile.InInt;
+      OutInt(NoOfType(i,3),4);
+      OutImage;
+
+      
+      Comment Create objects;
+      TermSendQ(gno):-NEW waitq(edit("TermSendQ",gno));
+      
+      NEW sender(edit("GroupSender",gno),TermSendQ(gno),CapGrpToRouter(gno),RouterInQ(1)).schedule(0.0);
+
+      FOR j:=1 STEP 1 UNTIL NoOfType(i,1) DO
+	 NEW speech(edit("SpeechSrc",gno),gno,j,TermSendQ(gno),AccessNode(gno),dest).schedule(0.0);
+         
+      FOR j:=1 STEP 1 UNTIL NoOfType(i,2) DO
+	 NEW data(edit("DataSrc",gno),gno,j,TermSendQ(gno),AccessNode(gno),dest).schedule(0.0);
+
+      FOR j:=1 STEP 1 UNTIL NoOfType(i,3) DO
+	 NEW video(edit("VideoSrc",gno),gno,j,TermSendQ(gno),AccessNode(gno),dest).schedule(0.0);
+
+    END for i;
+
+          comment  If PoliceType = 1 we creat token buckets;
+                    IF PoliceType = 1 THEN
+                    BEGIN
+                           
+	                 FOR i:=1 STEP 1 UNTIL m DO
+	                     BEGIN
+			          FOR j:=1 STEP 1 UNTIL 3 DO
+			               	    BucketDepth(i,j):= 0.0;
+			    END for i;   
+                         
+                          datafile.InImage;
+    		          OutText(datafile.InText(80));
+    		          datafile.InImage;
+    
+                   
+         	   
+         	 
+         	     FOR j:= 1 STEP 1 UNTIL m DO
+         	     BEGIN
+         	        FOR i:= 1  STEP 1 UNTIL 3 DO
+         	        BEGIN
+         	          j:= datafile.InInt;
+         	          OutInt(j, 2);
+         	          i:= datafile.InInt;
+         	          OutInt(i,4);
+         	          BucketSiz:= datafile.Inreal*NoOfType(j,i)+1;
+         	          OutFix(BucketSiz, 1,12);
+         	          TokRate:= datafile.Inreal*NoOfType(j,i)+1;
+         	          OutFix(TokRate, 1,12);
+         	          OutImage;
+         	          NEW TokenBucket(edit("Token Bucket",j), BucketSiz,TokRate,i,j).schedule(0.0);
+                         END for i;
+                     END for j;
+                     END if;
+    
+
+
+    COMMENT trace;
+
+    datafile.Close;
+           
+    Hold(SimTime);
+       
+   !MyTrace.close;
+   
+   
+  END class demos;
+END;
+

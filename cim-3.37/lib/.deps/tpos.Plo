@@ -1,0 +1,3 @@
+tpos.lo: tpos.c cim.h
+
+cim.h:

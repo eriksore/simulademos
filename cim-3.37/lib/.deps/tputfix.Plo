@@ -1,0 +1,5 @@
+tputfix.lo: tputfix.c cim.h ../config.h
+
+cim.h:
+
+../config.h:

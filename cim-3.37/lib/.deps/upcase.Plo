@@ -1,0 +1,3 @@
+upcase.lo: upcase.c cim.h
+
+cim.h:

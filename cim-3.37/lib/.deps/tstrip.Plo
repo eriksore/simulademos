@@ -1,0 +1,3 @@
+tstrip.lo: tstrip.c cim.h
+
+cim.h:

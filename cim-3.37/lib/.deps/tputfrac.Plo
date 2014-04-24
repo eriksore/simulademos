@@ -1,0 +1,3 @@
+tputfrac.lo: tputfrac.c cim.h
+
+cim.h:

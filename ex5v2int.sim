@@ -1,0 +1,79 @@
+begin
+external class demos="/home/erik/cim/demos.atr";
+demos begin
+
+!declarations;
+INTEGER i, simtime=30*24*60*60;
+REAL NEXT_CALL,
+MAX_CONNECTION_TIME,
+FIXED_CONNECTION_TIME,
+DISCONNECTION_TIME, 
+AVG_VARIABLE_CONNECTION_TIME,
+AVG_CONVERSATION_TIME; 
+integer lostconnection;
+REF(RDist)  connection_time, conversation;
+REF(Tally) tally_call, tally_lost;
+ 
+!entities;
+entity class subscriber;
+begin
+	ref(Timer) timer_;
+	real StartTime;
+loop:
+	hold(NEXT_CALL);
+	timer_ :- new timer("timer", this subscriber);
+	timer_.schedule(0.0);
+	StartTime:=time;
+	hold(connection_time.sample+FIXED_CONNECTION_TIME);
+	IF interrupted = 1 then
+		begin
+		goto drop !Hvis Connection time er for lang;
+		end	
+	else
+		begin
+		!interrupt timer_;
+		timer_.interrupt(1);
+		end;
+	hold(conversation.sample);
+	hold(DISCONNECTION_TIME);
+	tally_call.update(time-StartTime);
+	drop:
+	interrupted:=0;
+
+repeat;
+end***subscriber***;
+
+entity class Timer(s_); ref(Subscriber) s_;
+begin
+	hold(MAX_CONNECTION_TIME);
+	time;
+	IF interrupted = 0 then
+	begin
+	s_.interrupt(1);
+	lostconnection := 1;
+	tally_lost.update(lostconnection);
+	end;
+	lostconnection := 0;
+	tally_lost.update(lostconnection);
+end***timer***;
+
+!main constructor;
+
+NEXT_CALL := 30*60;
+MAX_CONNECTION_TIME := 15;
+FIXED_CONNECTION_TIME := 0.2;
+DISCONNECTION_TIME := 0.2;
+AVG_VARIABLE_CONNECTION_TIME := 3;
+AVG_CONVERSATION_TIME := 3*60;
+
+connection_time :- New NegExp("Conn Time",(1/AVG_VARIABLE_CONNECTION_TIME));
+conversation :- New NegExp("Conversation",(1/AVG_CONVERSATION_TIME));
+ 
+FOR i:=1 step 1 until 20 do !Legger til 20 subscribers;
+  new subscriber("Subscriber").schedule(0.0);
+!trace;
+tally_call :- new Tally("callduration");
+tally_lost :- new Tally("Lost connection");
+hold(simtime);
+end***demos***;
+end***simula***;

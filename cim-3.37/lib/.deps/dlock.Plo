@@ -1,0 +1,7 @@
+dlock.lo: dlock.c cim.h ../config.h simfile.h
+
+cim.h:
+
+../config.h:
+
+simfile.h:

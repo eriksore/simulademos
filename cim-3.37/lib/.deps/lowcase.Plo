@@ -1,0 +1,3 @@
+lowcase.lo: lowcase.c cim.h
+
+cim.h:

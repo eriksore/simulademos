@@ -1,0 +1,50 @@
+begin
+external class demos="/home/erik/cim/demos.atr";
+demos begin
+
+!declarations;
+REAL PACKET_ARRIVAL_RATE, TRANSMISSION_DELAY, DISCARD_TIME, packet_time_stamp;
+REF(RDist) PACKET_ARRIVAL_TIME, ROUTER_SERVICE_TIME;
+REF(waitq) array router(1:3);
+ref(rdist) array proc(1:3);
+REF(bdist) routerload;
+
+!entitites;
+entity class source;
+begin
+	ref(packets) packets_;
+loop:
+	hold(PACKET_ARRIVAL_TIME.sample);
+	packets_ :- new packets("packet");
+	packets_.schedule(0.0);
+repeat;
+end***source***;
+
+entity class packets;
+begin
+	packet_time_stamp := time;
+	if routerload.sample := true then router(1).wait
+	else router(2).wait;
+	
+end***packets***;
+
+entity class routerX(id);integer id;
+begin
+end***router***;
+ 
+!main constructor;
+PACKET_ARRIVAL_RATE := 0.5;
+PACKET_ARRIVAL_TIME :- NEW NegExp("packetarrival", 2.0);
+proc(1) :- NEW Erlang("routerservicetime",1.0/3.0, 3);
+TRANSMISSION_DELAY := 0.2;
+DISCARD_TIME := 3;
+routerload :- new draw("routerload", 0.5);
+
+for i:=1 step 1 until 3 do
+begin
+   router(i) :- new waitq("");
+   new routerX("", i).schedule(0.0);
+   
+end;
+end***demos***;
+end***simula***;

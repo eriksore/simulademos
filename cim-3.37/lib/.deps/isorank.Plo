@@ -1,0 +1,3 @@
+isorank.lo: isorank.c cim.h
+
+cim.h:

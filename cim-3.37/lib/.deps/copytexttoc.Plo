@@ -1,0 +1,3 @@
+copytexttoc.lo: copytexttoc.c cim.h
+
+cim.h:

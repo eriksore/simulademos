@@ -1,0 +1,3 @@
+lttext.lo: lttext.c cim.h
+
+cim.h:

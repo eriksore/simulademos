@@ -1,0 +1,3 @@
+powii.lo: powii.c cim.h
+
+cim.h:

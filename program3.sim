@@ -1,0 +1,27 @@
+begin
+external class demos = "/home/erik/cim/demos.atr";
+demos begin
+ref(RDist) waiting_time;
+real Mean_Wait_Time, SIM_TIME, start_time, time_waited;
+Entity class EntityXX;
+begin
+start_time:= time;
+hold(waiting_time.sample);
+time_waited := time - start_time;
+end;
+Mean_Wait_Time := 10*60; !10 Minutes in seconds;
+SIM_TIME := 1*24*60*60; !simulate for 1 days (in seconds);
+waiting_time :- new NegExp("wait1",1/Mean_Wait_Time);
+new EntityXX("EntityXX_Name").schedule(0.0);
+trace;
+trace;
+! Make a Trace of the entities events;
+!run simulation;
+hold(SIM_TIME);
+
+outText("Time waited: ");
+outFix( time_waited,5,10);
+outImage;
+end;
+end;
+

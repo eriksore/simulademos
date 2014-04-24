@@ -1,0 +1,3 @@
+endclass.lo: endclass.c cim.h
+
+cim.h:

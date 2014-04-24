@@ -1,0 +1,7 @@
+histo.lo: histo.c random.h ../config.h cim.h
+
+random.h:
+
+../config.h:
+
+cim.h:

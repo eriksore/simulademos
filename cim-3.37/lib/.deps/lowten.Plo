@@ -1,0 +1,3 @@
+lowten.lo: lowten.c cim.h
+
+cim.h:

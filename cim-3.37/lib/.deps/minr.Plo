@@ -1,0 +1,5 @@
+minr.lo: minr.c cim.h ../config.h
+
+cim.h:
+
+../config.h:

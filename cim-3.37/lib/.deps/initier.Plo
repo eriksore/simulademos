@@ -1,0 +1,3 @@
+initier.lo: initier.c cim.h
+
+cim.h:

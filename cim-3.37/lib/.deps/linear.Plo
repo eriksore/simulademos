@@ -1,0 +1,7 @@
+linear.lo: linear.c random.h ../config.h cim.h
+
+random.h:
+
+../config.h:
+
+cim.h:

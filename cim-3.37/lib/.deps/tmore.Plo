@@ -1,0 +1,3 @@
+tmore.lo: tmore.c cim.h
+
+cim.h:

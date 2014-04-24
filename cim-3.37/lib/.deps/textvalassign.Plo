@@ -1,0 +1,3 @@
+textvalassign.lo: textvalassign.c cim.h
+
+cim.h:

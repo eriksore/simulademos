@@ -1,0 +1,3 @@
+tmain.lo: tmain.c cim.h
+
+cim.h:

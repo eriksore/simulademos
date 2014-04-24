@@ -1,0 +1,3 @@
+tputchar.lo: tputchar.c cim.h
+
+cim.h:

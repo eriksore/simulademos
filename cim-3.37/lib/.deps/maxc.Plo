@@ -1,0 +1,3 @@
+maxc.lo: maxc.c cim.h
+
+cim.h:

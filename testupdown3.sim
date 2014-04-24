@@ -1,0 +1,500 @@
+BEGIN	
+	external class demos="/home/erik/cim/simula/demos.atr";
+	demos BEGIN
+!declarations;
+ref(InFile) datafile;
+ref(OutFile) MyServerdown, MySystemDown,ASystem,AServer,USystem,UServer;
+ref(OutFile) A_t_system,A_t_server,UpDownserver,Deltaupdownserver,DeltaUpdownsystem,intatser,intatsys;
+INTEGER n, m, k, simtime,repl,s,debug,deterministic,server1state,deltacheck;
+BOOLEAN status;
+ref(Bdist) failureModes, probRestarted, probReloaded;
+REAL probPermFailure, probRestart, probReload, timeProcessJob;
+REAL simseed, EVrestart, EVreload, EVrepair, EVnextfailure;
+ref(RDist) timeNextFailure, timeRestart, timeReload, timeRepair;
+ref(BIN) failedServers, controlRepairProcess;
+ref(condQ) repairprocess;
+ref(res) servertokens;
+ref(Count) countFails, countTrans, countPerm, countRep;
+ref(tally) tallyServersDown, tallySystemDown,tallyserver1down;
+long real sumsystemdowntime,systemtime,A_system,sumserverdowntime,A_server,U_server,U_system;
+long real timestampSystem,intervallength,t1,t2,intsumserverdown,intsumsystemdown;
+
+
+
+!entities;
+!*************************REPAIR MAN******************************;
+entity class repairMan;!Repair man enity that starts and repairs servers;
+  BEGIN
+    ref(serverInstance) array pointerServer(1:n);
+    ref(intervalmachine) interval;
+    ref(intervalat) findintat;
+    INTEGER i,q;
+    IF not (0<k and k<=(n-m)) then !Checks if the parameters is within logical bounds;
+      BEGIN
+      outimage;outimage;outtext("Wrong input values, remember 0<k<=n-m");outimage;outimage;
+      goto wronginput;
+      END
+    ELSE
+    
+    !****Repairman installs n servers*****;
+    FOR i := 1 step 1 until n do
+      BEGIN
+	pointerServer(i) :- new serverInstance("Server", this repairMan);
+	pointerServer(i).schedule(0.0);
+      END;
+  interval :- new intervalmachine("Interval", this repairman);
+  interval.schedule(0.0);
+  findintat :- new intervalat("Find interval At", this repairman);
+  findintat.schedule(0.0);
+  Deltaupdownsystem.outfix(time,2,15);deltaupdownsystem.outtext(",");!Start of system uptime;		
+   !****Start of repair loop			****;		
+loop:
+      failedServers.take(k);!Waits until k servers has failed;
+      hold(timeRepair.sample);!Holds for the repair time;
+      status:=true;!Sets conQ check signal to TRUE;
+      repairprocess.signal;
+      hold(0.0); !to let all waiting servers start up before changing condition to false again;
+      status:=false;!Sets condQ check signal to FALSE;      
+       
+      controlRepairProcess.give(k);!Releases tokens to be aquired by failed servers;
+      countRep.update(1);
+      repeat;
+    !**** End of repair loop			****;
+
+wronginput:!The parameters were not within logical bounds, and the program ends;	
+  END;
+
+!************************WORKING SERVERS**************************;
+entity class serverInstance(pointerServer); ref(repairMan) pointerServer;  
+  BEGIN
+
+    long real timestampServer;
+IF title = "Server 1" then!Decides which state server 1 should start in;
+  BEGIN
+    IF server1state = 0 then 
+      BEGIN
+	goto loop
+      END
+    ELSE
+    IF server1state = 1 then 
+      BEGIN      
+	servertokens.acquire(1);
+	UpDownserver.outfix(time,2,15);Updownserver.outtext(",");
+	updownserver.outtext("0");updownserver.outimage;
+	goto restart
+      END	
+    ELSE
+    IF server1state = 2 then 
+      BEGIN
+	UpDownserver.outfix(time,2,15);Updownserver.outtext(",");
+	updownserver.outtext("0");updownserver.outimage;
+	servertokens.acquire(1);
+	goto reload
+      END
+    ELSE
+    IF server1state = 3 then 
+      BEGIN
+	UpDownserver.outfix(time,2,15);Updownserver.outtext(",");
+	updownserver.outtext("0");updownserver.outimage;
+	servertokens.acquire(1);
+        goto permanentFailure
+      END
+    ELSE
+  END
+ELSE
+
+loop:   
+    IF title = "Server 1" then!A(t) statistics for server 1; 
+      BEGIN 
+	UpDownserver.outfix(time,2,15);Updownserver.outtext(",");
+	updownserver.outtext("1");updownserver.outimage;
+	Deltaupdownserver.outfix(time,2,15);Deltaupdownserver.outtext(",");
+	Deltacheck:=1;
+      END; 
+    !********************************Holds time to faile********;
+    hold(timeNextFailure.sample);
+    !********************************Failure********************;
+    IF title = "Server 1" then!A(t) statistics for server 1;  
+      BEGIN 
+	UpDownserver.outfix(time,2,15);Updownserver.outtext(",");
+	updownserver.outtext("1");updownserver.outimage; 
+	UpDownserver.outfix(time,2,15);Updownserver.outtext(",");
+	updownserver.outtext("0");updownserver.outimage;
+	Deltaupdownserver.outfix(time,2,15);Deltaupdownserver.outimage;
+	Deltacheck:=0;
+      END;
+
+    countFails.update(1);
+    servertokens.acquire(1);!Aquire a token so that the system can be checked for down or up state;
+    timestampServer := time;
+    ! update global time stamp when a server makes the system go down;
+    IF servertokens.avail = (m-1) then 
+    begin
+	timestampsystem := time;
+	Deltaupdownsystem.outfix(time,2,15);Deltaupdownsystem.outimage;
+    end;
+ 
+    IF failuremodes.sample THEN 
+      BEGIN !A permanent failure is detected;
+	goto permanentFailure;
+      END
+    ELSE 
+      BEGIN !Transient failure?;
+	countTrans.update(1);
+restart:
+	hold(timeRestart.sample);!Tries to restart server;
+	IF probRestarted.sample THEN 
+	  BEGIN !A restart fixed the server!;
+	    IF (servertokens.avail = (m-1)) then !If the system was in a down state, 
+	    then update systemdowntime statistics IF this restart takes it back to ok; 
+	      BEGIN
+		MySystemDown.OutFix(time - timeStampSystem,5,15);
+		mysystemdown.outimage;
+		sumsystemdowntime:=sumsystemdowntime+(time-timestampsystem);
+		tallySystemdown.update(time-timestampsystem);
+		deltaupdownsystem.outfix(time,2,15);deltaupdownsystem.outtext(",");
+	      END;
+	    IF title = "Server 1" then!IF this server was server 1, record statistics;
+	    BEGIN
+	      MyServerDown.OutFix(time - timeStampServer,5,15);myserverdown.outimage;
+	      sumserverdowntime:=sumserverdowntime+(time-timestampserver);
+	      tallyServer1Down.update(time-timestampserver);
+	      UpDownserver.outfix(time,2,15);Updownserver.outtext(",");
+	      updownserver.outtext("0");updownserver.outimage;
+	    END;
+	    tallyServersDown.update(time-timestampserver);
+	    servertokens.release(1);
+	   	    repeat;  
+	  END
+	ELSE !A restart didnt fix the server;
+	  BEGIN
+reload:
+	    hold(timeReload.sample);
+	    IF probReloaded.sample THEN !A reload fixed the server!;
+	      BEGIN
+		IF (servertokens.avail = (m-1)) then !If the system was in a down state, 
+		then update systemdowntime statistics IF this reload takes it back to ok;
+		BEGIN
+		  MySystemDown.OutFix(time - timeStampSystem,5,15);
+		  mysystemdown.outimage;
+		  sumsystemdowntime:=sumsystemdowntime+(time-timestampsystem);
+		  tallySystemdown.update(time-timestampsystem);
+		  deltaupdownsystem.outfix(time,2,15);deltaupdownsystem.outtext(",");
+		END;
+		IF title = "Server 1" then!IF this server was server 1, record statistics;
+		BEGIN
+		  MyServerDown.OutFix(time - timeStampServer,5,15);myserverdown.outimage;
+		  sumserverdowntime:=sumserverdowntime+(time-timestampserver);	
+		  tallyServer1Down.update(time-timestampserver);
+		  UpDownserver.outfix(time,2,15);Updownserver.outtext(",");
+		  updownserver.outtext("0");updownserver.outimage;
+		END;
+		
+		tallyServersDown.update(time-timestampserver);
+		servertokens.release(1);
+		repeat;  
+	      END
+	    ELSE !A reload didnt fix the server;
+	      BEGIN
+		countTrans.Update(-1);
+      		goto permanentFailure;
+	      END;
+	  END;
+      END;
+
+permanentFailure:!The failure was permanent;
+    countPerm.update(1);
+    !************* Server waits to be repaired ****************;
+    failedServers.give(1);	    !Gives a token to the
+     failedServers BIN;
+    controlRepairProcess.take(1);   !Takes one token and waits 
+    for repair to finish IIF a repair is not ongoig;
+    repairprocess.waituntil(status);!Waits for repair to finish;
+    !*************       Server repaired       ****************;
+
+    IF (servertokens.avail = (m-1)) then !If the system was in a down state, 
+      then update systemdowntime statistics IF fixing THIS server makes it ok again;
+      BEGIN
+        MySystemDown.OutFix(time - timeStampSystem,5,15);mysystemdown.outimage;
+        sumsystemdowntime:=sumsystemdowntime+(time-timestampsystem);
+	tallysystemdown.update(time-timestampsystem);
+	deltaupdownsystem.outfix(time,2,15);deltaupdownsystem.outtext(",");
+      END;
+    IF title = "Server 1" then!IF this server was server 1, record statistics;
+      BEGIN
+	MyServerDown.OutFix(time - timeStampServer,5,15);myserverdown.outimage;
+	sumserverdowntime:=sumserverdowntime+(time-timestampserver);
+	tallyServer1Down.update(time-timestampserver);	
+	UpDownserver.outfix(time,2,15);Updownserver.outtext(",");updownserver.outtext("0");updownserver.outimage;
+      END;
+    tallyServersDown.update(time-timestampserver);
+    servertokens.release(1);!Releases servertoken to tell the system that a server has been repaired;
+    repeat;
+  END;	
+
+
+!************************INTERVAL MACHINE**************************;
+entity class intervalmachine(interval); ref(repairman) interval;
+BEGIN
+  long real intervalsumsystem,intervalsumserver,t_x;
+  long real intervalsystem,intervalserver,deltadowntimesystem,deltadowntimeserver;
+  integer i;
+  i:=1;
+loop:
+      intervalsystem := sumsystemdowntime;
+      intervalserver := sumserverdowntime;
+      t_x :=i*intervallength;
+      hold(intervallength);
+      intervalsumsystem := sumsystemdowntime-intervalsystem;
+      intervalsumserver := sumserverdowntime-intervalserver;
+      deltadowntimesystem := intervalsumsystem/intervallength;
+      deltadowntimeserver := intervalsumserver/intervallength;
+
+      A_t_system.OutFix(t_x,2,15);      
+      A_t_system.outText(",");
+      A_t_system.OutFix(1-deltadowntimesystem,10,15);A_t_system.outimage;
+
+      A_t_server.OutFix(t_x,2,15);
+      A_t_server.outText(",");
+      A_t_server.outFix(1-deltadowntimeserver,10,15);A_t_server.outimage;
+      
+      i:=i+1;
+repeat;
+END;	
+!************************FIND INT AT**************************;
+entity class intervalat(findintat); ref(repairman) findintat;
+BEGIN
+  long real aintser,aintsys,uintser,uintsys,t;
+  t:=t2-t1;
+  hold(t1);
+  intsumserverdown:=sumserverdowntime;
+  intsumsystemdown:=sumsystemdowntime;
+  hold(t);
+  intsumserverdown:=sumserverdowntime-intsumserverdown;
+  intsumsystemdown:=sumsystemdowntime-intsumsystemdown;
+  uintser:=intsumserverdown/t;
+  uintsys:=intsumsystemdown/t;
+  aintser:=1-uintser;
+  aintsys:=1-uintsys;
+  intatser.outfix(aintser,5,15);intatser.outimage;
+  intatsys.outfix(aintsys,5,15);intatsys.outimage;  
+END;
+
+
+!main constructor;
+!*************************************************;
+!Write out to file;
+
+Myserverdown:- NEW OutFile("MyServerDown.txt");
+Myserverdown.setaccess("append");
+Myserverdown.open(blanks(180));
+
+Mysystemdown:- NEW OutFile("MySystemDown.txt");
+Mysystemdown.setaccess("append");
+Mysystemdown.open(blanks(180));
+
+ASystem:- NEW OutFile("ASystem.txt");
+ASystem.setaccess("append");
+ASystem.open(blanks(180));
+
+AServer:- NEW OutFile("AServer.txt");
+AServer.setaccess("append");
+AServer.open(blanks(180));
+
+USystem:- NEW OutFile("USystem.txt");
+USystem.setaccess("append");
+USystem.open(blanks(180));
+
+UServer:- NEW OutFile("UServer.txt");
+UServer.setaccess("append");
+UServer.open(blanks(180));
+
+A_t_system:- NEW OutFile("A_t_system.txt");
+A_t_system.setaccess("append");
+A_t_system.open(blanks(180));
+
+A_t_server:- NEW OutFile("A_t_server.txt");
+A_t_server.setaccess("append");
+A_t_server.open(blanks(180));
+
+UpDownserver:- NEW OutFile("UpDownserver.txt");
+UpDownserver.setaccess("append");
+UpDownserver.open(blanks(180));
+
+DeltaUpDownserver:- NEW OutFile("DeltaUpDownserver.txt");
+DeltaUpDownserver.setaccess("append");
+DeltaUpDownserver.open(blanks(180));
+
+DeltaUpDownsystem:- NEW OutFile("DeltaUpDownsystem.txt");
+DeltaUpDownsystem.setaccess("append");
+DeltaUpDownsystem.open(blanks(180));
+
+intatser:- NEW OutFile("intatser.txt");
+intatser.setaccess("append");
+intatser.open(blanks(180));
+
+intatsys:- NEW OutFile("intatsys.txt");
+intatsys.setaccess("append");
+intatsys.open(blanks(180));
+
+
+!Reads paramters in from file params.txt;
+datafile :- New InFile("datafile.txt");datafile.Open(Blanks(180));
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+n := datafile.InInt;OutInt(n,3);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+m := datafile.InInt; OutInt(m,3);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+k := datafile.InInt;OutInt(k,3);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+repl := datafile.InInt;OutInt(repl,3);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+simseed := datafile.InReal;Outfix(simseed,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+simtime := datafile.InInt;OutInt(simtime,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+EVrestart := datafile.InReal;OutFix(EVrestart,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+EVreload := datafile.InReal;Outfix(EVreload,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+EVrepair := datafile.InReal;Outfix(EVrepair,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+EVnextfailure := datafile.InReal;Outfix(EVnextfailure,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+probRestart := datafile.InReal;Outfix(probRestart,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+probReload := datafile.InReal;Outfix(probReload,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+probPermfailure := datafile.InReal;Outfix(probPermfailure,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+deterministic := datafile.InInt;OutInt(deterministic,1);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+server1state := datafile.InInt;OutInt(server1state,1);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+intervallength := datafile.InReal;Outfix(intervallength,1,12);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+t1 := datafile.InReal;Outfix(t1,1,15);OutImage;
+
+datafile.InImage;OutText(datafile.InText(80));datafile.InImage;
+t2 := datafile.InReal;Outfix(t2,1,15);OutImage;
+
+
+systemtime:=(31536000*simtime);
+setseed(simseed);
+status := false;
+
+!Entity-entity synchronization;
+failedServers :- New BIN("failedServers", 0);
+controlRepairProcess :- New BIN("controlRP",k);
+repairprocess :- New CONDQ("RepairProccess");
+repairprocess.all := true;
+servertokens :- New RES("servertokens",n);
+!Time between events are counted in seconds;
+If deterministic = 1 then
+  BEGIN
+  timeRestart :- New constant("Restart time",EVrestart);
+  timeReload :- New constant("Reload time", EVreload);
+  timeRepair :- New constant("Repair time", EVrepair);
+  END
+ELSE
+  BEGIN
+  timeRestart :- New NegExp("Restart time",1.0/EVrestart);
+  timeReload :- New NegExp("Reload time", 1.0/EVreload);
+  timeRepair :- New NegExp("Repair time", 1.0/EVrepair);
+
+  END;
+timeNextFailure :- New NegExp("Time Next Failure",1.0/EVnextfailure);
+!Random draws;
+failureModes :- new draw("PermFail?", probPermFailure);
+probRestarted :- new draw("Restart OK?", probRestart);
+probReloaded :- new draw("Reload OK?", probReload);
+!Tallies;
+tallyServersDown :- new Tally("Servers Down");
+tallySystemDown :- new Tally("System Down");
+tallyserver1down :- new Tally("Server 1 Down");
+!Counts;
+countFails :- new Count("#TotalFails");
+countTrans :- new Count("#TransFails");
+countPerm :- new Count("#PermFails");
+countRep :- new Count("#Repairs");
+
+!Starts program;
+WHILE replication <= repl do!Replication loop that starts a number of simulations;
+BEGIN
+sumsystemdowntime:=0;
+sumserverdowntime:=0;
+	new repairMan("Repair Man").schedule(0.0);
+!TRACE;
+	hold(31536000*simtime);	
+!*****Start write of A and U values to file*****;
+A_system:=systemtime-sumsystemdowntime;
+A_system:=A_system/systemtime;
+A_server:=systemtime-sumserverdowntime;
+A_server:=A_server/systemtime;
+U_server:=1-A_server;
+U_system:=1-A_system;
+outimage;outimage;outtext("Total simulation time: ");outfix(systemtime,2,15);outimage;
+outimage;outtext("Total system downtime: ");outfix(sumsystemdowntime,2,15);
+outimage;outtext("Availability of system: ");outfix(A_system,10,15);outimage;
+outimage;outtext("Total server 1 downtime: ");outfix(sumserverdowntime,2,15);
+outimage;outtext("Availability of server 1: ");outfix(A_server,10,15);outimage;outimage;
+ASystem.outfix(A_system,10,15);ASystem.outimage;
+AServer.outfix(A_server,10,15);AServer.outimage;
+USystem.outfix(U_system,10,15);USystem.outimage;
+UServer.outfix(U_server,10,15);UServer.outimage;
+IF deltacheck = 1 then
+  BEGIN
+    Deltaupdownserver.outfix(time,2,15);Deltaupdownserver.outimage;
+  END;
+IF (servertokens.avail > (m-1)) then
+  BEGIN
+    Deltaupdownsystem.outfix(time,2,15);deltaupdownsystem.outimage;	
+  END; 
+Replicate;
+END **replication**;
+!*****Start write of A and U values to file		   *****;
+!*****Done a second time to also record the last replication ***;
+A_system:=systemtime-sumsystemdowntime;
+A_system:=A_system/systemtime;
+A_server:=systemtime-sumserverdowntime;
+A_server:=A_server/systemtime;
+U_server:=1-A_server;
+U_system:=1-A_system;
+outimage;outimage;outtext("Total simulation time: ");outfix(systemtime,5,15);outimage;
+outimage;outtext("Total system downtime: ");outfix(sumsystemdowntime,5,15);
+outimage;outtext("Availability of system: ");outfix(A_system,10,15);outimage;
+outimage;outtext("Total server 1 downtime: ");outfix(sumserverdowntime,5,15);
+outimage;outtext("Availability of server 1: ");outfix(A_server,10,15);outimage;outimage;
+ASystem.outfix(A_system,10,15);ASystem.outimage;
+AServer.outfix(A_server,10,15);AServer.outimage;
+USystem.outfix(U_system,10,15);USystem.outimage;
+UServer.outfix(U_server,10,15);UServer.outimage;
+IF deltacheck = 1 then
+  BEGIN
+    Deltaupdownserver.outfix(time,2,15);Deltaupdownserver.outimage;
+  END;
+datafile.close;
+	END;!DEMOS;
+END;!SIMULA;
+
+
+
+
+

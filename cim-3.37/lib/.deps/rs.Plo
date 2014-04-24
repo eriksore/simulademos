@@ -1,0 +1,7 @@
+rs.lo: rs.c cim.h align.h ../config.h
+
+cim.h:
+
+align.h:
+
+../config.h:

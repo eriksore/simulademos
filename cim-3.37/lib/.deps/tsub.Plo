@@ -1,0 +1,3 @@
+tsub.lo: tsub.c cim.h
+
+cim.h:

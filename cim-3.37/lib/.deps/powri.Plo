@@ -1,0 +1,5 @@
+powri.lo: powri.c cim.h ../config.h
+
+cim.h:
+
+../config.h:

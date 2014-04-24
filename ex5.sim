@@ -1,0 +1,53 @@
+begin
+	external class demos="/home/erik/cim/demos.atr";
+	demos begin
+	real fixed_connection_time, variable_connection_time, avg_conversation_time, disconnection_time, max_connection_time, next_call;
+
+	fixed_connection_time := 30;		
+	
+	entity class subscriber;
+	begin
+	new subscriber("S_1").schedule(0.0);
+	ref(RDist) Next_Call;
+	hold(Next_Call.sample);
+	Next_Call :- new ("next_call_1", );
+
+	Ref(timer) timer_id_1;
+	timer_id_1 :- new timer("Timer_1", this subscriber);
+	timer_id_1.schedule(0.0);
+
+	ref(RDist) Call;
+	hold(Call.sample);
+	Call :- new ("call_1", );
+
+	if interrupted = 1 then goto after_conversation
+	else
+
+	ref(RDist) Conversation;
+	hold(Conversation.sample);
+	Conversation :- new ("conversation_1", );
+	
+	after_conversation: 
+	
+	ref(RDist) Disconnect;
+	hold(Disconnect.sample);
+	Disconnect :- new ("disconnect_1", );
+	
+	goto Next_call;
+
+	end***subscriber***;
+	
+	entity class timer(S_1); ref(subscriber) S_1;
+	begin
+	ref(RDist) Timer_Disconnect;
+	hold(Timer_Disconnect.sample);
+	Timer_Disconnect :- new ("Max_connection_time", 15);
+	if interrupted = 1 then begin 
+		Call
+		
+
+	end***timer***;
+
+ 	end***demos***; 
+
+end;

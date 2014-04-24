@@ -1,0 +1,3 @@
+tgetchar.lo: tgetchar.c cim.h
+
+cim.h:

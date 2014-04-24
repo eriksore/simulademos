@@ -1,0 +1,3 @@
+textassign.lo: textassign.c cim.h
+
+cim.h:

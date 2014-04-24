@@ -1,0 +1,3 @@
+signdx.lo: signdx.c cim.h
+
+cim.h:

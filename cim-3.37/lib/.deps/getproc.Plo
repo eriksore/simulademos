@@ -1,0 +1,3 @@
+getproc.lo: getproc.c cim.h
+
+cim.h:

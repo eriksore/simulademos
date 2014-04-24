@@ -1,0 +1,3 @@
+signi.lo: signi.c cim.h
+
+cim.h:

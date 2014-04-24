@@ -1,0 +1,203 @@
+begin
+   external class demos="/home/erik/cim/demos.atr";
+   demos begin
+   
+!declarations;
+INTEGER session_counter, b_step, b_min, b_max, simtime=5000000, customer_i, no_adjust;
+REAL gamma;
+ref(RDist) NEW_VIDEO_REQUEST, ACTIVE_SESSION_TIME, TIME_INTERVAL;
+ref(Bdist) dev_type;
+ref(RES) C_a;
+ref(count) Dev_counter_small, dev_counter_large, count_bitrate_change;
+ref(Tally) tally_drop, tally_sessions, tally_bitratechange, tally_bitrate, tally_bitrate_small, tally_bitrate_large;
+ref(Histogram) H;
+
+
+
+
+!entities;
+!****************************CUSTOMER*********************************;
+entity class customer;
+      begin
+	 ref(Session) S_id;
+loop:
+	 hold(NEW_VIDEO_REQUEST.sample);
+	 IF C_a.avail < 1 then
+	    begin
+	       tally_drop.update(1);	
+	       goto drop;
+	    end
+	 ELSE
+	    begin
+	       S_id :-new session("session", this customer);
+	       S_id.schedule(0.0);
+	       session_counter := session_counter + 1;
+	       tally_sessions.update(1);
+	    end;
+drop:
+	customer_i := customer_i + 1;
+	IF customer_i <= 5000 then
+	repeat;
+      end ** customer **;
+!**************************SESSION************************************;
+entity class session(S_id); ref(customer) S_id;
+      begin
+	ref(session_timer) T_id;
+	integer b, dev_s;
+	IF Dev_type.sample then 
+	begin
+	dev_s := 1;
+	dev_counter_small.update(1);
+	end
+	ELSE 
+	begin
+	dev_s := 0;
+	dev_counter_large.update(1);
+	end;
+	T_id :- new session_timer("Timer session", this session);
+	T_id.schedule(0.0);
+
+	 if C_a.avail < b_max then
+		begin		
+	    	b:=C_a.avail;
+		tally_bitrate.update(b);
+		h.update(b);
+			if dev_s = 1 then
+			  begin
+				if b >= 4 then tally_bitrate_small.update(1)
+				else tally_bitrate_small.update(0);
+		       	  end
+			else
+			  begin	
+				if b >= 6 then tally_bitrate_large.update(1)
+				else tally_bitrate_large.update(0);
+			  end;
+		end
+	 else
+		begin
+		b:=b_max;
+		tally_bitrate.update(b);
+		h.update(b);
+			if dev_s = 1 then
+			  begin
+				if b >= 4 then tally_bitrate_small.update(1)
+				else tally_bitrate_small.update(0);
+		       	  end
+			else
+			  begin	
+				if b >= 6 then tally_bitrate_large.update(1)
+				else tally_bitrate_large.update(0);
+			  end;
+		end;
+	c_a.acquire(b);
+!*** Checks if GAMMA = 0 ***;
+	if no_adjust = 1 then 
+		begin
+		hold(50000);
+		if interrupted = 1 then goto release_end
+		else goto release_end;
+		end
+	else
+		begin
+!*****START LOOP*******;
+loop:
+	 hold(TIME_INTERVAL.sample);
+release_end:
+	 if interrupted = 0 then
+	    begin
+	       	if C_a.avail > b_min then
+			begin
+			C_a.release(b);
+			b:=min(b + b_step,b_max);  
+			C_a.acquire(b);	
+			tally_bitratechange.update(1);
+			count_bitrate_change.update(1);
+			tally_bitrate.update(b);
+			h.update(b);
+				if dev_s = 1 then
+				  begin
+					if b >= 4 then tally_bitrate_small.update(1)
+					else tally_bitrate_small.update(0);
+		       		  end
+				else
+				  begin	
+					if b >= 6 then tally_bitrate_large.update(1)
+					else tally_bitrate_large.update(0);
+				  end;
+			end
+	       	else
+		 	begin
+			C_a.release(b);
+		     	b:=max(b - b_step,b_min);
+			C_a.acquire(b);
+			tally_bitratechange.update(0);
+			count_bitrate_change.update(1);
+			tally_bitrate.update(b);
+			h.update(b);
+				if dev_s = 1 then
+			  	begin
+					if b >= 4 then tally_bitrate_small.update(1)
+					else tally_bitrate_small.update(0);
+		       		  end
+				else
+				  begin	
+					if b >= 6 then tally_bitrate_large.update(1)
+					else tally_bitrate_large.update(0);
+				  end;
+		  	end;
+		repeat;
+!*****END LOOP*****;
+	    end
+	 else
+	    begin
+	       	C_a.release(b);
+	       	session_counter := session_counter - 1;
+	    end;    
+	end;
+      END ** session **;
+!*********************************SESSION TIMER***********************;
+entity class session_timer(T_id); ref(session) T_id;
+      begin
+	 hold(ACTIVE_SESSION_TIME.sample);
+	 T_id.interrupt(1);	 
+      end;
+
+!main constructor;
+no_adjust:=0;!If set to 1, the bitrate will never be adjusted. The same as Gamma=0;
+gamma:=0.1;
+NEW_VIDEO_REQUEST :- New NegExp("New_Vid_Req",1.0/4.0);
+dev_type :- new draw("Dev_type", 0.7);
+TIME_INTERVAL :- New NegExp("T_i", gamma);
+ACTIVE_SESSION_TIME :- New NegExp("Session_time",1.0/90.0);
+session_counter := 0;
+C_a :- New RES("Cap_avail", 100);
+b_min := 2;
+b_max := 8;
+b_step := 1;
+dev_counter_small :- new Count("small screen");
+dev_counter_large :- new Count("large scren");
+count_bitrate_change :- new Count("#bitrate change");
+session_counter := 0;
+customer_i := 1;
+H :- New Histogram("Bitrate", 1, 8, 7 );
+
+tally_drop :- new Tally("Customer drop");
+tally_sessions :- new Tally("Sessions");
+tally_bitratechange :- new Tally("Bitratechange");
+tally_bitrate :- new Tally("Bitrate");
+tally_bitrate_small :- new Tally("Small Bitrate");!with regards to QoE, 1 for very good, 0 else;
+tally_bitrate_large :- new Tally("Large Bitrate");!with regards to QoE, 1 for very good, 0 else;
+
+!trace;
+
+While replication <= 10 do
+begin 
+	new customer("customer").schedule(0.0);
+	hold(simtime);
+	customer_i := 1;!resets customer counter so that customer class loops 5000 times;
+	Replicate;
+end ** replication **;
+	
+	END ** demos **;
+END **simula**;
+

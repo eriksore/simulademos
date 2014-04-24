@@ -1,0 +1,3 @@
+getav.lo: getav.c cim.h
+
+cim.h:

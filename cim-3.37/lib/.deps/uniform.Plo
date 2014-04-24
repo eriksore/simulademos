@@ -1,0 +1,7 @@
+uniform.lo: uniform.c random.h ../config.h cim.h
+
+random.h:
+
+../config.h:
+
+cim.h:

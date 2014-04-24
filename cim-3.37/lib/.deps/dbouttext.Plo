@@ -1,0 +1,5 @@
+dbouttext.lo: dbouttext.c cim.h simfile.h
+
+cim.h:
+
+simfile.h:

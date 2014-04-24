@@ -1,0 +1,11 @@
+tsglob.lo: tsglob.c cim.h ../config.h ../limit.h ../config.h simfile.h
+
+cim.h:
+
+../config.h:
+
+../limit.h:
+
+../config.h:
+
+simfile.h:

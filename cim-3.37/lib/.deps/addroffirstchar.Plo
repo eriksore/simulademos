@@ -1,0 +1,3 @@
+addroffirstchar.lo: addroffirstchar.c cim.h
+
+cim.h:

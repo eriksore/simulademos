@@ -1,0 +1,3 @@
+rin.lo: rin.c cim.h
+
+cim.h:

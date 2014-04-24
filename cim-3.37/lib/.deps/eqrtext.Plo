@@ -1,0 +1,3 @@
+eqrtext.lo: eqrtext.c cim.h
+
+cim.h:

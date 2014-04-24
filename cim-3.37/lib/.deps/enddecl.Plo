@@ -1,0 +1,3 @@
+enddecl.lo: enddecl.c cim.h
+
+cim.h:

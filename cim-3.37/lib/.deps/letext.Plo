@@ -1,0 +1,3 @@
+letext.lo: letext.c cim.h
+
+cim.h:

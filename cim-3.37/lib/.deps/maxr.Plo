@@ -1,0 +1,5 @@
+maxr.lo: maxr.c cim.h ../config.h
+
+cim.h:
+
+../config.h:

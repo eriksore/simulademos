@@ -1,0 +1,3 @@
+xmalloc.lo: xmalloc.c cim.h
+
+cim.h:

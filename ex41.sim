@@ -1,0 +1,24 @@
+begin
+	external class demos="/home/erik/cim/demos.atr";
+	demos begin
+	ref(RDist) waiting_time;
+	real fixed_connection_time, variable_connection_time, avg_conversation_time, disconnection_time, max_connection_time, next_call;	
+
+	Entity class subscriber;
+	begin
+		start_time:=time;
+		hold(next_call.sample);
+	 	integer k;
+		ref(scanner) S;
+		new query("query_timer").
+		schedule(arrivals.sample);	
+	end;
+	
+	Entity class timer;
+	begin
+	
+
+	end;
+
+	end;
+end;

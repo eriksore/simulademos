@@ -1,0 +1,60 @@
+begin
+external class demos="/home/erik/cim/demos.atr";
+demos begin
+
+!declarations;
+ref(RDist) HOLD_FAILURE, HOLD_TEST, HOLD_REPAIR;
+ref(BDist) Pp, Px;
+ref(RES) R;
+ref(BIN) COMP_b
+
+!entities;
+entity class switches(S_id); 
+	begin
+	ref(comparator) C_id;
+loop:
+		hold(HOLD_FAILURE.sample);
+		if interrupted = 0 then
+			begin
+			COMP_bin.give(1) 
+			end
+		else
+			begin
+		hold(HOLD_TEST.sample);
+			end;
+		if Pp.sample = 0 then 
+			begin
+				if Px.sample = 0 then repeat else goto repair;
+			end
+		else	
+			begin
+				goto repair;
+			end;
+repair:
+		R.aquire(1);
+		hold(HOLD_REPAIR.sample);
+		R.release(1);
+repeat;
+	end **switches**;
+
+entity class comparator(C_id); ref(switches) C_id;
+	begin
+loop:
+	COMP_bin.take(1);
+	C_id.interrupt(1);
+repeat;
+	end **comp**;
+
+!main constructor;
+HOLD_FAILURE :- New NegExp("Failure_time",0.000005);
+HOLD_TEST :- New NegExp("Service_test", 1.0/60.0);
+HOLD_REPAIR :- New NegExp("Repair_time",1.0/10000.0);
+Pp :- New Draw("PP", 0.45);
+Px :- New Draw("Px", 0.05);
+R :- new RES("Repair_man", 1);
+COMP_bin :- New BIN("Comp_bin", 0);
+
+new switch_("switch").schedule(0.0);
+
+end**demos**;
+end;      

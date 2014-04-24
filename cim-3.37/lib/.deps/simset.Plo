@@ -1,0 +1,3 @@
+simset.lo: simset.c cim.h
+
+cim.h:

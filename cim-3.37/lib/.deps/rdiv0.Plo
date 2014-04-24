@@ -1,0 +1,5 @@
+rdiv0.lo: rdiv0.c cim.h ../config.h
+
+cim.h:
+
+../config.h:

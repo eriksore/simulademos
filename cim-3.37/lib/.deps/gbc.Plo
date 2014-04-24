@@ -1,0 +1,9 @@
+gbc.lo: gbc.c cim.h align.h ../config.h simfile.h
+
+cim.h:
+
+align.h:
+
+../config.h:
+
+simfile.h:

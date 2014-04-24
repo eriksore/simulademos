@@ -1,0 +1,3 @@
+copyarrtoc.lo: copyarrtoc.c cim.h
+
+cim.h:

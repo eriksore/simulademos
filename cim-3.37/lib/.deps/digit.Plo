@@ -1,0 +1,3 @@
+digit.lo: digit.c cim.h
+
+cim.h:

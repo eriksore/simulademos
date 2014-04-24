@@ -1,0 +1,7 @@
+discrete.lo: discrete.c random.h ../config.h cim.h
+
+random.h:
+
+../config.h:
+
+cim.h:

@@ -1,0 +1,7 @@
+blanks.lo: blanks.c cim.h ../limit.h ../config.h
+
+cim.h:
+
+../limit.h:
+
+../config.h:

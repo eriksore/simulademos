@@ -1,0 +1,28 @@
+simulaid.lo: simulaid.c cim.h ../config.h \
+ /usr/include/i386-linux-gnu/sys/utsname.h /usr/include/features.h \
+ /usr/include/i386-linux-gnu/bits/predefs.h \
+ /usr/include/i386-linux-gnu/sys/cdefs.h \
+ /usr/include/i386-linux-gnu/bits/wordsize.h \
+ /usr/include/i386-linux-gnu/gnu/stubs.h \
+ /usr/include/i386-linux-gnu/gnu/stubs-32.h \
+ /usr/include/i386-linux-gnu/bits/utsname.h
+
+cim.h:
+
+../config.h:
+
+/usr/include/i386-linux-gnu/sys/utsname.h:
+
+/usr/include/features.h:
+
+/usr/include/i386-linux-gnu/bits/predefs.h:
+
+/usr/include/i386-linux-gnu/sys/cdefs.h:
+
+/usr/include/i386-linux-gnu/bits/wordsize.h:
+
+/usr/include/i386-linux-gnu/gnu/stubs.h:
+
+/usr/include/i386-linux-gnu/gnu/stubs-32.h:
+
+/usr/include/i386-linux-gnu/bits/utsname.h:

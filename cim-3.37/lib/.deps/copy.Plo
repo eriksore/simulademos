@@ -1,0 +1,3 @@
+copy.lo: copy.c cim.h
+
+cim.h:

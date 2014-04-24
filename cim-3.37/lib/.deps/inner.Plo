@@ -1,0 +1,3 @@
+inner.lo: inner.c cim.h
+
+cim.h:

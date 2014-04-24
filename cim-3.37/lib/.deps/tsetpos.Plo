@@ -1,0 +1,3 @@
+tsetpos.lo: tsetpos.c cim.h
+
+cim.h:

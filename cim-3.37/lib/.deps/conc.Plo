@@ -1,0 +1,7 @@
+conc.lo: conc.c cim.h ../limit.h ../config.h
+
+cim.h:
+
+../limit.h:
+
+../config.h:

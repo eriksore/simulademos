@@ -1,0 +1,3 @@
+mini.lo: mini.c cim.h
+
+cim.h:

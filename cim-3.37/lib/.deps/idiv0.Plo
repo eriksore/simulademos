@@ -1,0 +1,5 @@
+idiv0.lo: idiv0.c cim.h ../config.h
+
+cim.h:
+
+../config.h:

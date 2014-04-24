@@ -1,0 +1,6 @@
+mellbuilder.o: mellbuilder.c obstack.h \
+ /usr/lib/gcc/i686-linux-gnu/4.6/include/stddef.h
+
+obstack.h:
+
+/usr/lib/gcc/i686-linux-gnu/4.6/include/stddef.h:

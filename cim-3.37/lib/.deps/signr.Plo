@@ -1,0 +1,5 @@
+signr.lo: signr.c cim.h ../config.h
+
+cim.h:
+
+../config.h:

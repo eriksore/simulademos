@@ -1,0 +1,3 @@
+gettv.lo: gettv.c cim.h
+
+cim.h:
